@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using System.Data.Common;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -103,9 +104,8 @@ namespace Rabbitmq.Core.Infrastructure.Messaging
 				return MessageStoreResult.StorageFailed;
 			}
 		}
-		public async Task<MessageStoreResult> StoreOutgoingMessageAsync<TEvent>(
-	TEvent @event,
-	IDbContextTransaction ts)
+		public async Task<MessageStoreResult> StoreOutgoingMessageAsync<TEvent>(TEvent @event,
+			IDbContextTransaction ts, DbConnection dbConnection)
 	where TEvent : IntegrationEvent
 		{
 			if (ts == null) throw new ArgumentNullException(nameof(ts));
@@ -120,9 +120,9 @@ namespace Rabbitmq.Core.Infrastructure.Messaging
 					Status = MessageStatus.Pending,
 					CreatedAt = @event.CreationDate
 				};
-
-              //   _dbContext.Database.UseTransaction(ts.GetDbTransaction()); // when there is multiple contexts
-
+				
+				 _dbContext.Database.SetDbConnection(dbConnection);
+                 await _dbContext.Database.UseTransactionAsync(ts.GetDbTransaction());
 				_dbContext.Set<OutboxMessage>().Add(message);
 				await _dbContext.SaveChangesAsync();
 				return MessageStoreResult.Success;

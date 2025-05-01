@@ -1,4 +1,5 @@
 ﻿using System.Data;
+using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Rabbitmq.API.Events;
@@ -57,7 +58,7 @@ public class ApplicationDbContext:DbContext,IEventStoreDbContext
             {
              
                 var result =  await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-                await PublishIntegrationEventsAsync(integrationEventsEmitters, Database.CurrentTransaction, cancellationToken);
+                await PublishIntegrationEventsAsync(integrationEventsEmitters, Database.CurrentTransaction,Database.GetDbConnection(), cancellationToken);
 
                 return result;
             }
@@ -68,7 +69,7 @@ public class ApplicationDbContext:DbContext,IEventStoreDbContext
             {
                 
                 var result = await base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
-                await PublishIntegrationEventsAsync(integrationEventsEmitters, transaction, cancellationToken);
+                await PublishIntegrationEventsAsync(integrationEventsEmitters, transaction,Database.GetDbConnection(), cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
                 return result;
@@ -96,7 +97,9 @@ public class ApplicationDbContext:DbContext,IEventStoreDbContext
             yield return (emitter, events.ToList());
         }
     }
-    private async Task PublishIntegrationEventsAsync(List<(BaseEntity EventEmitter, IReadOnlyList<IntegrationEvent> EmittedEvents)> emitters, IDbContextTransaction transaction, CancellationToken cancellationToken)
+    private async Task PublishIntegrationEventsAsync(
+        List<(BaseEntity EventEmitter, IReadOnlyList<IntegrationEvent> EmittedEvents)> emitters,
+        IDbContextTransaction transaction, DbConnection dbConnection, CancellationToken cancellationToken)
     {
         if (emitters.Count == 0)
         {
@@ -110,7 +113,7 @@ public class ApplicationDbContext:DbContext,IEventStoreDbContext
 
         foreach (var emittedEvent in allEmittedEvents)
         {
-            await _eventBus.PublishAsync(emittedEvent,transaction);
+            await _eventBus.PublishAsync(emittedEvent,transaction,dbConnection);
         }
 
         emitters.ForEach(x => x.EventEmitter.ClearIntegrationEvents());

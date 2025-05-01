@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+﻿using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Storage;
 using Rabbitmq.Core.Domain;
 using Rabbitmq.Core.Events;
 
@@ -11,7 +12,8 @@ namespace Rabbitmq.Core.Infrastructure.Messaging
 		Task RollbackAsync();
 		Task<MessageStoreResult> IsDuplicateAsync(Guid messageId);
 		Task<MessageStoreResult> StoreOutgoingMessageAsync<TEvent>(TEvent @event, CancellationToken cancellationToken = default) where TEvent : IntegrationEvent;
-		Task<MessageStoreResult> StoreOutgoingMessageAsync<TEvent>(TEvent @event, IDbContextTransaction ts) where TEvent : IntegrationEvent;
+		Task<MessageStoreResult> StoreOutgoingMessageAsync<TEvent>(TEvent @event, IDbContextTransaction ts,
+			DbConnection dbConnection) where TEvent : IntegrationEvent;
 		Task<MessageStoreResult> StoreIncomingMessageAsync(
 			Guid messageId,
 			string eventType,

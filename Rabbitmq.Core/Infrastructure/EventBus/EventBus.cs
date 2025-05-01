@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.Data.Common;
+using System.Diagnostics;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,7 +64,7 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 				await PublishDirect(@event, ct);
 			}
 		}
-		public async Task PublishAsync<TEvent>(TEvent @event, IDbContextTransaction ts)
+		public async Task PublishAsync<TEvent>(TEvent @event, IDbContextTransaction ts, DbConnection dbConnection)
 		where TEvent : IntegrationEvent
 		{
 			await using var scope = _serviceProvider.CreateAsyncScope();
@@ -71,7 +72,7 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 
 			try
 			{
-				var storeResult = await outbox.StoreOutgoingMessageAsync(@event, ts);
+				var storeResult = await outbox.StoreOutgoingMessageAsync(@event, ts,dbConnection);
 
 				// If message was a duplicate, we should still publish it
 				// because the outbox might be behind (eventually consistent)

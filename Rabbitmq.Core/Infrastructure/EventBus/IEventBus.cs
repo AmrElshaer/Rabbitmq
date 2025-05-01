@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Storage;
+﻿using System.Data.Common;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Hosting;
 using RabbitMQ.Client;
 using Rabbitmq.Core.Events;
@@ -18,7 +19,7 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 			CancellationToken ct = default)
 			where TEvent : IntegrationEvent;
 		Task PublishAsync<TEvent>(TEvent @event,
-			IDbContextTransaction transaction)
+			IDbContextTransaction transaction, DbConnection dbConnection)
 	       where TEvent : IntegrationEvent;
 		Task PublishDirect<TEvent>(TEvent @event,
 			CancellationToken ct = default)
