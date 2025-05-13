@@ -16,27 +16,18 @@ public static class EventBusExtensions
 	public static IEventBusBuilder AddRabbitMqEventBus(this IHostApplicationBuilder builder, string connectionName)
 	{
 		ArgumentNullException.ThrowIfNull(builder);
-
+		builder.Services.AddOptions<EventBusOptions>()
+			.Bind(builder.Configuration.GetSection("EventBus"));
 		builder.AddRabbitMQClient(connectionName, configureConnectionFactory: factory =>
 		{
 			(factory).DispatchConsumersAsync = true;
 		});
-
-		builder.Services.AddHostedService<OutboxWorker<EventBusDbContext>>();
-
 		builder.Services.AddSingleton<IResiliencePipelineProvider, ResiliencePipelineFactory>();
-		builder.Services.AddScoped<IMessageDeduplicationService, MessageDeduplicationService>();
 		builder.Services.AddSingleton<IRabbitMQPersistentConnection, RabbitMQPersistentConnection>();
-
-		builder.Services.AddScoped<IMessageProcessor, MessageProcessor>();
 		builder.Services.AddSingleton<IEventBus, EventBus>();
 		builder.Services.AddSingleton<IHostedService>(sp =>
 			(EventBus)sp.GetRequiredService<IEventBus>());
-
-		
-
 		builder.Services.AddSingleton<EventBusSubscriptionInfo>();
-
 		return new EventBusBuilder(builder.Services);
 	
 	}
@@ -52,6 +43,9 @@ public static class EventBusExtensions
 	{
 		ArgumentNullException.ThrowIfNull(builder);
 
+		builder.Services.AddHostedService<OutboxWorker<EventBusDbContext>>();
+		builder.Services.AddScoped<IMessageDeduplicationService, MessageDeduplicationService>();
+		builder.Services.AddScoped<IMessageProcessor, MessageProcessor>();
 		builder.Services.AddDbContext<EventBusDbContext>((serviceProvider, options) =>
 		{
 			var context = serviceProvider.GetRequiredService<TDbContext>();
@@ -95,6 +89,18 @@ public static class EventBusExtensions
 			builder.Services.Configure<EventBusSubscriptionInfo>(o =>
 			{
 				o.EventTypes[typeof(TEvent).Name] = typeof(TEvent);
+			});
+			return builder;
+		}
+		public static IEventBusBuilder AddSubscription<TEvent, THandler>(
+			this IEventBusBuilder builder,string queueName)
+			where TEvent : IntegrationEvent
+			where THandler : class, IIntegrationEventHandler<TEvent>
+		{
+			builder.Services.AddKeyedTransient<IIntegrationEventHandler, THandler>(typeof(TEvent));
+			builder.Services.Configure<EventBusSubscriptionInfo>(o =>
+			{
+				o.EventTypes[queueName] = typeof(TEvent);
 			});
 			return builder;
 		}

@@ -4,6 +4,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rabbitmq.API", "Rabbitmq.AP
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rabbitmq.Core", "Rabbitmq.Core\Rabbitmq.Core.csproj", "{C4C7EAB4-6D38-4A6D-B32B-FDF33589585D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ExternalService.API", "ExternalService.API\ExternalService.API.csproj", "{59F1D854-3225-4DB7-A5F6-E7512757FBEE}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -18,5 +20,9 @@ Global
 		{C4C7EAB4-6D38-4A6D-B32B-FDF33589585D}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C4C7EAB4-6D38-4A6D-B32B-FDF33589585D}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C4C7EAB4-6D38-4A6D-B32B-FDF33589585D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{59F1D854-3225-4DB7-A5F6-E7512757FBEE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{59F1D854-3225-4DB7-A5F6-E7512757FBEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{59F1D854-3225-4DB7-A5F6-E7512757FBEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{59F1D854-3225-4DB7-A5F6-E7512757FBEE}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

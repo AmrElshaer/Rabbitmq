@@ -3,17 +3,17 @@
 namespace Rabbitmq.API.Events;
 
 public class OrderCreatedIntegrationEventHandler
-    : IIntegrationEventHandler<OrderCreatedIntegrationEvent>
+    : IIntegrationEventHandler<CustomerMasstransitOrderCreatedIntegrationEvent>
 {
     private readonly ILogger<OrderCreatedIntegrationEventHandler> _logger;
-    public List<OrderCreatedIntegrationEvent> ReceivedEvents { get; } = new();
+    public List<CustomerMasstransitOrderCreatedIntegrationEvent> ReceivedEvents { get; } = new();
 
     public OrderCreatedIntegrationEventHandler(ILogger<OrderCreatedIntegrationEventHandler> logger)
     {
         _logger = logger;
     }
 
-    public Task Handle(OrderCreatedIntegrationEvent @event)
+    public Task Handle(CustomerMasstransitOrderCreatedIntegrationEvent @event)
     {
         _logger.LogInformation("Handling OrderCreatedIntegrationEvent for OrderId: {OrderId}", @event.OrderId);
 

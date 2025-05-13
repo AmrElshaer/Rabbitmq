@@ -33,9 +33,15 @@ public class Order:BaseEntity
             Number = $"ORD-{Guid.NewGuid()}",
             CustomerName = customerName
         };
-        var @event =new OrderCreatedIntegrationEvent(order.Id,order.CustomerName);
+        var @event =new CustomerMasstransitOrderCreatedIntegrationEvent(order.Id,order.CustomerName);
         order.AddIntegrationEvent(@event);
         return order;
+    }
+
+    public void CancelOrder()
+    {
+        var @event = new CustomerMasstransitOrderCancelledIntegrationEvent(Id, CustomerName);
+        AddIntegrationEvent(@event);
     }
 }
 public record CreateOrderCommand(string CustomerName);

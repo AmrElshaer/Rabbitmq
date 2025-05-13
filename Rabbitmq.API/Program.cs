@@ -18,12 +18,11 @@ builder.Services.AddDbContext<ApplicationDbContext>((serviceProvider, options) =
 {
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default"));
 });
-builder.Services.AddOptions<EventBusOptions>()
-    .Bind(builder.Configuration.GetSection("EventBus"))
-    .ValidateDataAnnotations() 
-    .ValidateOnStart();
+
 builder.AddRabbitMqEventBus("RabbitMQ")
-    .AddSubscription<OrderCreatedIntegrationEvent, OrderCreatedIntegrationEventHandler>()
+    .AddSubscription<CustomerMasstransitOrderCreatedIntegrationEvent, OrderCreatedIntegrationEventHandler>()
+    .AddSubscription<CustomerMasstransitOrderCancelledIntegrationEvent, OrderCancelledIntegrationEventHandler>()
+    .AddSubscription<ExternalEventOrderCreatedEvent,ExternalEventOrderCreatedEventHandler>()
     .AddEventDbContext<ApplicationDbContext>(
     builder.Configuration.GetConnectionString("Default"));
 var app = builder.Build();
@@ -60,9 +59,16 @@ app.MapGet("/weatherforecast", () =>
 app.MapPost("/add-order",async (CreateOrderCommand command,ApplicationDbContext dbContext,IEventBus eventBus) =>
 {
     var order = Order.Create(command.CustomerName);
-    var @event =new OrderCreatedIntegrationEvent(order.Id,order.CustomerName);
      await dbContext.Orders.AddAsync(order);
      await dbContext.SaveChangesAsync();
+    return order.Id;
+});
+app.MapPost("orders/{uuid:guid}/cancel-order",async (Guid uuid,ApplicationDbContext dbContext,IEventBus eventBus) =>
+{
+    var order = await dbContext.Orders.FirstOrDefaultAsync(o => o.Id == uuid);
+    ArgumentNullException.ThrowIfNull(order);
+    order.CancelOrder();
+    await dbContext.SaveChangesAsync();
     return order.Id;
 });
 app.Run();

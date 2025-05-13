@@ -109,6 +109,28 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 				throw new MessageNotAckedException(@event.Id);
 			}
 		}
+		
+		public async Task PublishDirect<TEvent>(TEvent @event,string queue, CancellationToken ct = default)
+			where TEvent : IntegrationEvent
+		{
+			using var channel = await _persistentConnection.CreateModelAsync(ct);
+			var props = channel.CreateBasicProperties();
+			RabbitMQMessageHelper.ConfigureBasicProperties(props, @event, _options.SubscriptionClientName);
+
+			channel.ConfirmSelect();
+			channel.BasicPublish(
+				exchange: RabbitMQConstants.MainExchangeName,
+				routingKey: queue,
+				mandatory: true,
+				basicProperties: props,
+				body: JsonSerializer.SerializeToUtf8Bytes(@event, @event.GetType(), _subscriptionInfo.JsonSerializerOptions));
+
+			if (!channel.WaitForConfirms(RabbitMQConstants.DefaultConfirmTimeout))
+			{
+				throw new MessageNotAckedException(@event.Id);
+			}
+		}
+
 
 		public async Task StartAsync(CancellationToken ct)
 		{
@@ -118,12 +140,17 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 			var consumer = new AsyncEventingBasicConsumer(_consumerChannel);
 			consumer.Received += MessagetHandler;
 
-			_consumerChannel.BasicConsume(
-				queue: _options.SubscriptionClientName,
-				autoAck: false,
-				consumer: consumer);
+			// Start consuming from all event queues
+			foreach (var (eventName, _) in _subscriptionInfo.EventTypes)
+			{
+				var queueName = eventName;
+				_consumerChannel.BasicConsume(
+					queue: queueName,
+					autoAck: false,
+					consumer: consumer);
 
-			_logger.LogInformation("Started consuming from {QueueName}", _options.SubscriptionClientName);
+				_logger.LogInformation("Started consuming from queue {QueueName}", queueName);
+			}
 		}
 
 		private void ConfigureTopology(IModel channel)
@@ -137,53 +164,53 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 					durable: true,
 					autoDelete: false);
 
-				// Dead letter exchange 
+				// Dead letter exchange
 				channel.ExchangeDeclare(
 					exchange: RabbitMQConstants.DeadLetterExchangeName,
 					type: ExchangeType.Direct,
 					durable: true,
 					autoDelete: false);
 
-				// Main queue
-				var queueArgs = new Dictionary<string, object>
-				{
-					["x-dead-letter-exchange"] = RabbitMQConstants.DeadLetterExchangeName,
-					["x-message-ttl"] = _options.MessageTTL,
-					//["x-delivery-limit"] = _options.RetryCount + 1 // Total attempts = retries + initial
-				};
-
-				channel.QueueDeclare(
-					queue: _options.SubscriptionClientName,
-					durable: true,
-					exclusive: false,
-					autoDelete: false,
-					arguments: queueArgs);
-
-				// DLQ 
-				var dlqArgs = new Dictionary<string, object>
-				{
-					["x-queue-mode"] = "lazy" // Better for DLQs with potentially large messages
-				};
-
-				channel.QueueDeclare(
-					queue: $"{_options.SubscriptionClientName}_dlq",
-					durable: true,
-					exclusive: false,
-					autoDelete: false,
-					arguments: dlqArgs);
-
-
 				foreach (var (eventName, eventType) in _subscriptionInfo.EventTypes)
 				{
-					// Main queue binding
+					// Create queue for each event type
+					var queueName = eventName;
+					var queueArgs = new Dictionary<string, object>
+					{
+						["x-dead-letter-exchange"] = RabbitMQConstants.DeadLetterExchangeName,
+						["x-message-ttl"] = _options.MessageTTL,
+					};
+
+					channel.QueueDeclare(
+						queue: queueName,
+						durable: true,
+						exclusive: false,
+						autoDelete: false,
+						arguments: queueArgs);
+
+					// Create DLQ for each event type
+					var dlqName = $"{queueName}_dlq";
+					var dlqArgs = new Dictionary<string, object>
+					{
+						["x-queue-mode"] = "lazy"
+					};
+
+					channel.QueueDeclare(
+						queue: dlqName,
+						durable: true,
+						exclusive: false,
+						autoDelete: false,
+						arguments: dlqArgs);
+
+					// Bind main queue to exchange
 					channel.QueueBind(
-						queue: _options.SubscriptionClientName,
+						queue: queueName,
 						exchange: RabbitMQConstants.MainExchangeName,
 						routingKey: eventName);
 
-					// DLQ binding with same routing key
+					// Bind DLQ to dead letter exchange
 					channel.QueueBind(
-						queue: $"{_options.SubscriptionClientName}_dlq",
+						queue: dlqName,
 						exchange: RabbitMQConstants.DeadLetterExchangeName,
 						routingKey: eventName);
 				}
@@ -191,8 +218,8 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 			catch (Exception ex)
 			{
 				_logger.LogError(ex, "Failed to configure RabbitMQ topology");
+				throw;
 			}
-
 		}
 		public async Task ValidateTopologyAsync(CancellationToken ct)
 		{
@@ -202,8 +229,13 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 			{
 				channel.ExchangeDeclarePassive(RabbitMQConstants.MainExchangeName);
 				channel.ExchangeDeclarePassive(RabbitMQConstants.DeadLetterExchangeName);
-				channel.QueueDeclarePassive(_options.SubscriptionClientName);
-				channel.QueueDeclarePassive($"{_options.SubscriptionClientName}_dlq");
+
+				foreach (var (eventName, _) in _subscriptionInfo.EventTypes)
+				{
+					var queueName = eventName;
+					channel.QueueDeclarePassive(queueName);
+					channel.QueueDeclarePassive($"{queueName}_dlq");
+				}
 
 				_logger.LogInformation("RabbitMQ topology validated successfully");
 			}
@@ -219,8 +251,12 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 			{
 				try
 				{
-					_consumerChannel.QueueDelete(_options.SubscriptionClientName, ifUnused: false, ifEmpty: false);
-					_consumerChannel.QueueDelete($"{_options.SubscriptionClientName}_dlq", ifUnused: false, ifEmpty: false);
+					foreach (var (eventName, _) in _subscriptionInfo.EventTypes)
+					{
+						var queueName = eventName;
+						_consumerChannel.QueueDelete(queueName, ifUnused: false, ifEmpty: false);
+						_consumerChannel.QueueDelete($"{queueName}_dlq", ifUnused: false, ifEmpty: false);
+					}
 					_consumerChannel.ExchangeDelete(RabbitMQConstants.MainExchangeName, ifUnused: false);
 					_consumerChannel.ExchangeDelete(RabbitMQConstants.DeadLetterExchangeName, ifUnused: false);
 				}
@@ -257,7 +293,7 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 					activity?.SetTag("message.status", "processed");
 					_logger.LogInformation("Processed message {MessageId}", messageId);
 				}
-				
+
 				else if (result == ProcessingResult.RetryLater && attemptNumber < _options.RetryCount + 1)
 				{
 					var delay = CalculateRetryDelay(attemptNumber);
@@ -367,10 +403,17 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 			var consumer = new AsyncEventingBasicConsumer(_consumerChannel);
 			consumer.Received += MessagetHandler;
 
-			_consumerChannel.BasicConsume(
-				queue: _options.SubscriptionClientName,
-				autoAck: false,
-				consumer: consumer);
+			// Start consuming from all event queues
+			foreach (var (eventName, _) in _subscriptionInfo.EventTypes)
+			{
+				var queueName = eventName;
+				_consumerChannel.BasicConsume(
+					queue: queueName,
+					autoAck: false,
+					consumer: consumer);
+
+				_logger.LogInformation("Started consuming from queue {QueueName}", queueName);
+			}
 		}
 
 		private async void OnConnectionRecovered(object? sender, EventArgs e)
@@ -421,7 +464,7 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 				[RabbitMQConstants.EventTypeHeader] = @event.GetType().Name,
 				[RabbitMQConstants.OccurredOnHeader] = @event.CreationDate.ToString("O"),
 				[RabbitMQConstants.SourceServiceHeader] = serviceName,
-				["x-retry-count"] = 0 
+				["x-retry-count"] = 0
 			};
 		}
 

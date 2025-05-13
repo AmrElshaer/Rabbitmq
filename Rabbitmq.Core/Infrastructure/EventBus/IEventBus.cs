@@ -24,6 +24,8 @@ namespace Rabbitmq.Core.Infrastructure.EventBus
 		Task PublishDirect<TEvent>(TEvent @event,
 			CancellationToken ct = default)
 			where TEvent : IntegrationEvent;
+		Task PublishDirect<TEvent>(TEvent @event,string queue, CancellationToken ct = default)
+			where TEvent : IntegrationEvent;
 		IModel? GetConsumerChannel();
 		Task ResetTopologyAsync(CancellationToken ct = default);
 		Task ValidateTopologyAsync(CancellationToken ct = default);
